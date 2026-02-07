@@ -145,12 +145,18 @@
             background: #dc2626;
         }
 
-        .filter-section {
-            background: #f0f9ff;
-            padding: 15px 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+        .global-filters {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            padding: 20px 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
             border: 2px solid #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
         }
 
         .toggle-container {
@@ -433,6 +439,22 @@
             margin: 15px 0;
         }
 
+        .warning {
+            background: #fef3c7;
+            color: #92400e;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .info {
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
         @media (max-width: 768px) {
             .charts-section {
                 grid-template-columns: 1fr;
@@ -445,6 +467,152 @@
             table {
                 font-size: 0.9em;
             }
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 1000;
+            overflow: auto;
+            padding: 40px 20px;
+        }
+
+        .modal.active {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 1200px;
+            width: 100%;
+            max-height: 90vh;
+            overflow: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .modal-header h2 {
+            color: #333;
+            font-size: 1.8em;
+            margin: 0;
+        }
+
+        .modal-close {
+            background: #f3f4f6;
+            border: none;
+            font-size: 1.5em;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-close:hover {
+            background: #ef4444;
+            color: white;
+        }
+
+        .categorizer-list {
+            max-height: 500px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+
+        .transaction-row {
+            display: grid;
+            grid-template-columns: 100px 1fr 120px 150px;
+            gap: 15px;
+            padding: 15px;
+            background: #f9fafb;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .transaction-row:hover {
+            background: #f3f4f6;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .transaction-date {
+            font-size: 0.9em;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .transaction-desc {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .transaction-amount {
+            font-weight: 600;
+            text-align: right;
+        }
+
+        .category-selector {
+            display: flex;
+            gap: 8px;
+        }
+
+        .category-selector select {
+            flex: 1;
+            padding: 8px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 0.95em;
+            cursor: pointer;
+            background: white;
+        }
+
+        .category-selector button {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .category-selector button:hover {
+            background: #5568d3;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #333;
         }
     </style>
 </head>
@@ -472,6 +640,14 @@
                 <h3>Net</h3>
                 <div class="stat-value" id="net-amount">$0.00</div>
             </div>
+        </div>
+
+        <div class="global-filters">
+            <label class="toggle-container">
+                <input type="checkbox" id="exclude-transfers" onchange="toggleTransferExclusion()">
+                <span class="toggle-label">💡 Exclude Transfers & Payments (show actual spending only)</span>
+            </label>
+            <button class="btn btn-primary" onclick="showCategorizer()">🏷️ Categorize "Other" Transactions</button>
         </div>
 
         <div class="charts-section">
@@ -517,13 +693,6 @@
         <div class="transactions-section">
             <div class="chart-title">Recent Transactions</div>
 
-            <div class="filter-section">
-                <label class="toggle-container">
-                    <input type="checkbox" id="exclude-transfers" onchange="refreshData()">
-                    <span class="toggle-label">💡 Exclude Transfers & Payments (show actual spending only)</span>
-                </label>
-            </div>
-
             <div class="controls">
                 <div class="file-input-wrapper">
                     <button class="btn btn-primary">📁 Import CSV Files</button>
@@ -558,6 +727,7 @@
     <script>
         // Load data on page load
         document.addEventListener('DOMContentLoaded', function() {
+            restoreTransferToggleState();
             refreshData();
         });
 
@@ -620,6 +790,17 @@
 
         function shouldExcludeTransfers() {
             return document.getElementById('exclude-transfers').checked;
+        }
+
+        function toggleTransferExclusion() {
+            const checked = document.getElementById('exclude-transfers').checked;
+            localStorage.setItem('excludeTransfers', checked);
+            refreshData();
+        }
+
+        function restoreTransferToggleState() {
+            const excluded = localStorage.getItem('excludeTransfers') === 'true';
+            document.getElementById('exclude-transfers').checked = excluded;
         }
 
         function loadStats() {
@@ -793,7 +974,11 @@
 
         function showMessage(message, type) {
             const messageArea = document.getElementById('message-area');
-            const className = type === 'error' ? 'error' : (type === 'success' ? 'success' : 'info');
+            let className = 'info';
+            if (type === 'error') className = 'error';
+            else if (type === 'success') className = 'success';
+            else if (type === 'warning') className = 'warning';
+
             messageArea.innerHTML = `<div class="${className}">${message}</div>`;
 
             setTimeout(() => {
@@ -994,6 +1179,177 @@
             loadBudgetMonths();
             loadBudgetStatus();
         });
+
+        // Categorizer Modal Functions
+        let otherTransactions = [];
+        const allCategories = [
+            'Dining', 'Grocery', 'Gas', 'Shopping', 'Sports/Exercise', 'Airlines', 'Healthcare',
+            'Insurance', 'Travel', 'Software/Tech', 'Subscriptions', 'Utilities',
+            'Entertainment', 'Transportation', 'Transfer', 'Payment', 'Income'
+        ];
+
+        function showCategorizer() {
+            document.getElementById('categorizer-modal').classList.add('active');
+            loadOtherTransactions();
+        }
+
+        function closeCategorizer() {
+            document.getElementById('categorizer-modal').classList.remove('active');
+        }
+
+        function loadOtherTransactions() {
+            fetch('/api/transactions')
+                .then(res => res.json())
+                .then(transactions => {
+                    otherTransactions = transactions.filter(t =>
+                        t.category === 'Other' || t.category === 'Uncategorized' || !t.category
+                    );
+
+                    const listEl = document.getElementById('categorizer-list');
+
+                    if (otherTransactions.length === 0) {
+                        listEl.innerHTML = `
+                            <div class="empty-state">
+                                <h3>🎉 All transactions are categorized!</h3>
+                                <p>No "Other" transactions found. Great job!</p>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    listEl.innerHTML = otherTransactions.map((t, idx) => `
+                        <div class="transaction-row">
+                            <div class="transaction-date">${t.date}</div>
+                            <div class="transaction-desc">${t.description}</div>
+                            <div class="transaction-amount amount-negative">
+                                $${Math.abs(t.amount).toLocaleString('en-US', {minimumFractionDigits: 2})}
+                            </div>
+                            <div class="category-selector">
+                                <select id="cat-select-${idx}">
+                                    <option value="">Select category...</option>
+                                    ${allCategories.map(cat =>
+                                        `<option value="${cat}">${cat}</option>`
+                                    ).join('')}
+                                </select>
+                                <button onclick="saveMapping(${idx})">✓</button>
+                            </div>
+                        </div>
+                    `).join('');
+                });
+        }
+
+        function saveMapping(index) {
+            const transaction = otherTransactions[index];
+            const selectEl = document.getElementById(`cat-select-${index}`);
+            const category = selectEl.value;
+
+            if (!category) {
+                alert('Please select a category');
+                return;
+            }
+
+            // Extract merchant pattern from description
+            const merchantPattern = extractMerchantPattern(transaction.description);
+            console.log(`Extracting pattern from: "${transaction.description}"`);
+            console.log(`Extracted pattern: "${merchantPattern}"`);
+
+            if (!merchantPattern || merchantPattern.length < 3) {
+                showMessage('⚠️ Pattern too short. Please contact support.', 'error');
+                return;
+            }
+
+            fetch('/api/category-mappings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    merchant_pattern: merchantPattern,
+                    category: category,
+                    transaction_id: transaction.id
+                })
+            })
+            .then(res => {
+                if (!res.ok) {
+                    return res.json().then(err => {
+                        throw new Error(err.error || `HTTP ${res.status}: ${res.statusText}`);
+                    });
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data.updated_count === 0) {
+                    showMessage(`⚠️ Pattern "${merchantPattern}" didn't match any transactions. Try a shorter pattern or check the description.`, 'warning');
+                } else {
+                    showMessage(`✓ Learned: "${merchantPattern}" → ${category} (${data.updated_count} transactions updated)`, 'success');
+                    loadOtherTransactions();
+                    refreshData();
+                }
+            })
+            .catch(err => {
+                console.error('Error saving mapping:', err);
+                showMessage('Error saving mapping: ' + err.message, 'error');
+            });
+        }
+
+        function extractMerchantPattern(description) {
+            // Extract the merchant name from the description
+            // Remove common prefixes and suffixes, keep core merchant name
+            let pattern = description
+                .toUpperCase()
+                .replace(/\s+#\d+$/, '')  // Remove trailing #numbers
+                .replace(/\s+\d{2}\/\d{2}$/, '')  // Remove trailing dates
+                .replace(/^SQ\s+\*\s*/, '')  // Remove Square prefix
+                .replace(/^TST\*\s*/, '')  // Remove Toast prefix
+                .replace(/^FSP\*\s*/, '')  // Remove FSP prefix
+                .replace(/^CTLP\*\s*/, '')  // Remove CTLP prefix
+                .replace(/^POS\s+/, '')  // Remove POS prefix
+                .trim();
+
+            // Remove common location patterns at the end
+            pattern = pattern
+                .replace(/\s+[A-Z]{2}$/, '')  // Remove state abbreviation at end (e.g., " SC", " NY")
+                .replace(/\s+\d{5}$/, '')  // Remove ZIP codes
+                .trim();
+
+            // Split and take first meaningful part (merchant name)
+            // But be smart about it - don't truncate too aggressively
+            const parts = pattern.split(/\s{2,}/);  // Split on 2+ spaces (often separates merchant from location)
+            if (parts.length > 1) {
+                // Take first part before big gap (usually the merchant name)
+                pattern = parts[0].trim();
+            }
+
+            // If still very long, take first 4 words max
+            const words = pattern.split(/\s+/);
+            if (words.length > 4) {
+                pattern = words.slice(0, 4).join(' ');
+            }
+
+            return pattern.trim();
+        }
+
+        // Close modal when clicking outside
+        document.addEventListener('click', function(e) {
+            const modal = document.getElementById('categorizer-modal');
+            if (e.target === modal) {
+                closeCategorizer();
+            }
+        });
     </script>
+
+    <!-- Categorizer Modal -->
+    <div id="categorizer-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🏷️ Categorize "Other" Transactions</h2>
+                <button class="modal-close" onclick="closeCategorizer()">×</button>
+            </div>
+            <p style="color: #666; margin-bottom: 20px;">
+                Select a category for each transaction. The system will learn and automatically categorize similar transactions in the future.
+            </p>
+            <div id="categorizer-list" class="categorizer-list">
+                <div class="empty-state">Loading...</div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

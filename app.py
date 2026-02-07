@@ -12,7 +12,7 @@ import json
 
 app = Flask(__name__)
 db = TransactionDatabase()
-parser = CSVParser()
+parser = CSVParser(db)
 
 
 @app.route('/')
@@ -242,6 +242,62 @@ def get_budget_status():
     year_month = request.args.get('month')  # Optional YYYY-MM parameter
     status = db.get_budget_status(year_month)
     return jsonify(status)
+
+
+# Category Mapping API Endpoints
+
+@app.route('/api/category-mappings', methods=['GET'])
+def get_category_mappings():
+    """Get all learned category mappings"""
+    mappings = db.get_all_category_mappings()
+    return jsonify(mappings)
+
+
+@app.route('/api/category-mappings', methods=['POST'])
+def save_category_mapping():
+    """Save a new category mapping and update matching transactions"""
+    data = request.get_json()
+    merchant_pattern = data.get('merchant_pattern')
+    category = data.get('category')
+    transaction_id = data.get('transaction_id')
+
+    print(f"[DEBUG] Saving mapping: '{merchant_pattern}' → '{category}'")
+
+    if not merchant_pattern or not category:
+        print(f"[ERROR] Missing required fields: pattern={merchant_pattern}, category={category}")
+        return jsonify({'error': 'merchant_pattern and category required'}), 400
+
+    if not merchant_pattern.strip():
+        print(f"[ERROR] Empty merchant pattern after stripping")
+        return jsonify({'error': 'merchant_pattern cannot be empty'}), 400
+
+    try:
+        # Save the mapping
+        db.save_category_mapping(merchant_pattern, category)
+        print(f"[DEBUG] Mapping saved to database")
+
+        # Update all matching transactions
+        updated_count = db.update_transactions_by_pattern(merchant_pattern, category)
+        print(f"[DEBUG] Updated {updated_count} transactions")
+
+        return jsonify({
+            'message': 'Mapping saved successfully',
+            'merchant_pattern': merchant_pattern,
+            'category': category,
+            'updated_count': updated_count
+        })
+    except Exception as e:
+        print(f"[ERROR] Exception in save_category_mapping: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/category-mappings/<int:mapping_id>', methods=['DELETE'])
+def delete_category_mapping(mapping_id):
+    """Delete a category mapping"""
+    db.delete_category_mapping(mapping_id)
+    return jsonify({'message': 'Mapping deleted successfully'})
 
 
 if __name__ == '__main__':

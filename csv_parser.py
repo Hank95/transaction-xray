@@ -12,12 +12,28 @@ from pathlib import Path
 class CSVParser:
     """Parses CSV files from different banks and normalizes the data"""
 
-    def __init__(self):
+    def __init__(self, db=None):
+        self.db = db
         self.parsers = {
             'amex': self._parse_amex,
             'apple': self._parse_apple_card,
             'checking': self._parse_checking
         }
+        self._load_category_mappings()
+
+    def _load_category_mappings(self):
+        """Load learned category mappings from database"""
+        self.learned_mappings = {}
+        if self.db:
+            try:
+                mappings = self.db.get_all_category_mappings()
+                for mapping in mappings:
+                    pattern = mapping['merchant_pattern'].upper()
+                    category = mapping['category']
+                    self.learned_mappings[pattern] = category
+            except Exception:
+                # Database might not be initialized yet or table doesn't exist
+                pass
 
     def detect_format(self, file_path: str) -> str:
         """Detect which bank format the CSV is"""
@@ -205,9 +221,29 @@ class CSVParser:
 
         return category_mapping.get(apple_category, apple_category)
 
+    def _load_category_mappings(self):
+        """Load learned category mappings from database"""
+        self.learned_mappings = {}
+        if self.db:
+            try:
+                mappings = self.db.get_all_category_mappings()
+                for mapping in mappings:
+                    pattern = mapping['merchant_pattern'].upper()
+                    category = mapping['category']
+                    self.learned_mappings[pattern] = category
+            except Exception:
+                # Database might not be initialized yet or table doesn't exist
+                pass
+
     def _categorize_transaction(self, description: str) -> str:
         """Auto-categorize transactions based on description keywords"""
+        desc_upper = description.upper()
         desc_lower = description.lower()
+
+        # First, check learned category mappings
+        for pattern, category in self.learned_mappings.items():
+            if pattern in desc_upper:
+                return category
 
         # Category keywords mapping
         # NOTE: Order matters! More specific categories should come first
@@ -225,15 +261,17 @@ class CSVParser:
             'Dining': ['restaurant', 'sugar', 'malagon', 'southbound', 'tippling', 'by the way', 'merci',
                       'cafe', 'coffee', 'one trick pony', 'starbucks', 'pizza', 'burger',
                       'grill', 'bar', 'bistro', 'diner', 'tst*', 'fsp*blue'],
-            'Shopping': ['amazon', 'aplpay amazon', 'target', 'walmart', 'retail', 'store', 'shop',
+            'Shopping': ['amazon', 'aplpay amazon', 'amazon mktpl', 'mktpl', 'target', 'walmart', 'retail', 'store', 'shop',
                         'mall', 'lululemon', 'j crew'],
             'Gas': ['circle k', 'shell', 'exxonmobil', 'bp', 'chevron', 'gas station', 'fuel', 'citgo', 'marathon',
                    'sunoco', 'wawa', 'buc-ee', 'qt ', 'refuel', 'parkers'],
+            'Sports/Exercise': ['gym', 'fitness', 'yoga', 'crossfit', 'peloton', 'strava', 'marathon', 'race',
+                               'running', 'cycling', 'swim', 'athletic', 'sports', 'workout'],
             'Transportation': ['uber', 'lyft', 'transit', 'airport parking', 'chs airport', 'toll', 'ultrasignup'],
             'Utilities': ['dominion', 'comcast', 'xfinity', 'electric', 'power', 'water', 'gas company', 'internet',
                          'phone', 'cellular', 'verizon', 'at&t'],
             'Healthcare': ['pharmacy', 'cvs', 'walgreens', 'medical', 'doctor', 'hospital'],
-            'Entertainment': ['movie', 'theater', 'gym', 'fitness'],
+            'Entertainment': ['movie', 'theater', 'concert', 'show', 'tickets'],
             # Transfer should be last to avoid false matches - only match specific patterns
             'Transfer': ['check paid', 'check number', 'check deposit', 'mobile payment', 'autopay payment',
                         'applecard gsbank', 'amex epayment', 'amex dps',

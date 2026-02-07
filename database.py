@@ -60,6 +60,16 @@ class TransactionDatabase:
             )
         """)
 
+        # Category mappings table for learned categorization
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS category_mappings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                merchant_pattern TEXT NOT NULL UNIQUE,
+                category TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         conn.commit()
         conn.close()
 
@@ -348,3 +358,77 @@ class TransactionDatabase:
             result.append(data)
 
         return result
+
+    # Category Mapping Methods
+
+    def save_category_mapping(self, merchant_pattern: str, category: str) -> None:
+        """Save or update a merchant pattern to category mapping"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO category_mappings (merchant_pattern, category)
+            VALUES (?, ?)
+            ON CONFLICT(merchant_pattern)
+            DO UPDATE SET category = ?, created_at = CURRENT_TIMESTAMP
+        """, (merchant_pattern, category, category))
+
+        conn.commit()
+        conn.close()
+
+    def get_all_category_mappings(self) -> List[Dict]:
+        """Get all learned category mappings"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT * FROM category_mappings
+            ORDER BY created_at DESC
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [dict(row) for row in rows]
+
+    def get_category_mapping(self, merchant_pattern: str) -> Optional[str]:
+        """Get category for a merchant pattern"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT category FROM category_mappings
+            WHERE merchant_pattern = ?
+        """, (merchant_pattern,))
+
+        row = cursor.fetchone()
+        conn.close()
+
+        return row[0] if row else None
+
+    def update_transactions_by_pattern(self, merchant_pattern: str, category: str) -> int:
+        """Update all transactions matching a merchant pattern to a new category"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # Use LIKE to match the pattern anywhere in the description
+        cursor.execute("""
+            UPDATE transactions
+            SET category = ?
+            WHERE UPPER(description) LIKE '%' || ? || '%'
+            AND (category = 'Other' OR category = 'Uncategorized' OR category IS NULL)
+        """, (category, merchant_pattern.upper()))
+
+        count = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        return count
+
+    def delete_category_mapping(self, mapping_id: int) -> None:
+        """Delete a category mapping"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM category_mappings WHERE id = ?", (mapping_id,))
+        conn.commit()
+        conn.close()

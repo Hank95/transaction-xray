@@ -19,7 +19,7 @@ def main():
     args = parser.parse_args()
 
     db = TransactionDatabase()
-    csv_parser = CSVParser()
+    csv_parser = CSVParser(db)
 
     # Clear data if requested
     if args.clear:
