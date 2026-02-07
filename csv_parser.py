@@ -90,11 +90,15 @@ class CSVParser:
                 # Skip if this is a payment (negative amount)
                 transaction_type = row['Type']
 
+                # Get Apple's category and normalize it to our categories
+                apple_category = row.get('Category', 'Uncategorized')
+                normalized_category = self._normalize_apple_category(apple_category)
+
                 transactions.append({
                     'date': self._normalize_date(row['Transaction Date']),
                     'description': row['Description'].strip(),
                     'merchant': row.get('Merchant', '').strip(),
-                    'category': row.get('Category', 'Uncategorized'),
+                    'category': normalized_category,
                     'amount': abs(amount),
                     'account_type': 'Apple Card',
                     'account_name': row.get('Purchased By', ''),
@@ -182,6 +186,24 @@ class CSVParser:
         merchant = description.split('  ')[0]  # Take first part before double space
         merchant = re.sub(r'\s+\d{5,}.*', '', merchant)  # Remove phone numbers and after
         return merchant.strip()[:100]  # Limit length
+
+    def _normalize_apple_category(self, apple_category: str) -> str:
+        """Normalize Apple Card category names to our standard categories"""
+        # Map Apple's category names to our categories
+        category_mapping = {
+            'Restaurants': 'Dining',
+            'Food and Drink': 'Dining',
+            'Groceries': 'Grocery',
+            'Gas Stations': 'Gas',
+            'Entertainment': 'Entertainment',
+            'Shopping': 'Shopping',
+            'Travel': 'Travel',
+            'Transportation': 'Transportation',
+            'Health and Fitness': 'Healthcare',
+            'Services': 'Other',
+        }
+
+        return category_mapping.get(apple_category, apple_category)
 
     def _categorize_transaction(self, description: str) -> str:
         """Auto-categorize transactions based on description keywords"""

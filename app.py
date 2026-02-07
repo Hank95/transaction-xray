@@ -192,6 +192,60 @@ def clear_data():
     return jsonify({'message': 'All transactions cleared'})
 
 
+# Budget API Endpoints
+
+@app.route('/api/budgets', methods=['GET'])
+def get_budgets():
+    """Get all budgets"""
+    budgets = db.get_all_budgets()
+    return jsonify(budgets)
+
+
+@app.route('/api/budgets/<category>', methods=['GET'])
+def get_budget(category):
+    """Get budget for a specific category"""
+    budget = db.get_budget(category)
+    if budget:
+        return jsonify(budget)
+    return jsonify({'error': 'Budget not found'}), 404
+
+
+@app.route('/api/budgets', methods=['POST'])
+def set_budget():
+    """Set or update a budget"""
+    data = request.get_json()
+    category = data.get('category')
+    monthly_limit = data.get('monthly_limit')
+
+    if not category or monthly_limit is None:
+        return jsonify({'error': 'Category and monthly_limit required'}), 400
+
+    try:
+        monthly_limit = float(monthly_limit)
+        if monthly_limit < 0:
+            return jsonify({'error': 'Budget must be non-negative'}), 400
+
+        db.set_budget(category, monthly_limit)
+        return jsonify({'message': 'Budget set successfully', 'category': category, 'monthly_limit': monthly_limit})
+    except ValueError:
+        return jsonify({'error': 'Invalid budget amount'}), 400
+
+
+@app.route('/api/budgets/<category>', methods=['DELETE'])
+def delete_budget(category):
+    """Delete a budget"""
+    db.delete_budget(category)
+    return jsonify({'message': 'Budget deleted successfully'})
+
+
+@app.route('/api/budget-status')
+def get_budget_status():
+    """Get budget status for current or specified month"""
+    year_month = request.args.get('month')  # Optional YYYY-MM parameter
+    status = db.get_budget_status(year_month)
+    return jsonify(status)
+
+
 if __name__ == '__main__':
     # Create templates directory if it doesn't exist
     os.makedirs('templates', exist_ok=True)

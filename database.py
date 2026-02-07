@@ -48,6 +48,18 @@ class TransactionDatabase:
             CREATE INDEX IF NOT EXISTS idx_account_type ON transactions(account_type)
         """)
 
+        # Budgets table for monthly budget tracking
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS budgets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category TEXT NOT NULL,
+                monthly_limit REAL NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(category)
+            )
+        """)
+
         conn.commit()
         conn.close()
 
@@ -233,3 +245,106 @@ class TransactionDatabase:
         count = cursor.fetchone()[0]
         conn.close()
         return count
+
+    # Budget Management Methods
+
+    def set_budget(self, category: str, monthly_limit: float) -> None:
+        """Set or update monthly budget for a category"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO budgets (category, monthly_limit, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(category)
+            DO UPDATE SET monthly_limit = ?, updated_at = CURRENT_TIMESTAMP
+        """, (category, monthly_limit, monthly_limit))
+
+        conn.commit()
+        conn.close()
+
+    def get_budget(self, category: str) -> Optional[Dict]:
+        """Get budget for a specific category"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT * FROM budgets WHERE category = ?
+        """, (category,))
+
+        row = cursor.fetchone()
+        conn.close()
+
+        return dict(row) if row else None
+
+    def get_all_budgets(self) -> List[Dict]:
+        """Get all budgets"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM budgets ORDER BY category")
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [dict(row) for row in rows]
+
+    def delete_budget(self, category: str) -> None:
+        """Delete budget for a category"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM budgets WHERE category = ?", (category,))
+        conn.commit()
+        conn.close()
+
+    def get_budget_status(self, year_month: Optional[str] = None) -> List[Dict]:
+        """
+        Get budget status showing actual spending vs budget for each category
+        year_month format: 'YYYY-MM' (e.g., '2026-02')
+        If not provided, uses current month
+        """
+        import datetime
+
+        if not year_month:
+            year_month = datetime.datetime.now().strftime('%Y-%m')
+
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Get actual spending for the month, excluding Transfer and Payment
+        cursor.execute("""
+            SELECT
+                b.category,
+                b.monthly_limit as budget,
+                COALESCE(SUM(CASE
+                    WHEN t.amount > 0
+                    AND t.category NOT IN ('Transfer', 'Payment', 'Income')
+                    THEN t.amount
+                    ELSE 0
+                END), 0) as actual,
+                b.monthly_limit - COALESCE(SUM(CASE
+                    WHEN t.amount > 0
+                    AND t.category NOT IN ('Transfer', 'Payment', 'Income')
+                    THEN t.amount
+                    ELSE 0
+                END), 0) as remaining
+            FROM budgets b
+            LEFT JOIN transactions t ON b.category = t.category
+                AND strftime('%Y-%m', t.date) = ?
+            GROUP BY b.category, b.monthly_limit
+            ORDER BY b.category
+        """, (year_month,))
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        result = []
+        for row in rows:
+            data = dict(row)
+            data['percent_used'] = (data['actual'] / data['budget'] * 100) if data['budget'] > 0 else 0
+            data['over_budget'] = data['actual'] > data['budget']
+            result.append(data)
+
+        return result
