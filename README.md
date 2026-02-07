@@ -2,7 +2,7 @@
 
 A powerful Python + HTML web application for analyzing your financial transactions from multiple bank accounts. Break free from Excel and get deep insights into your spending, income, and budgeting with intelligent categorization and interactive visualizations.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
 ![Python](https://img.shields.io/badge/python-3.11+-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 
@@ -17,17 +17,31 @@ Automatically parses and normalizes CSV files from:
 
 ### 📊 Smart Financial Analysis
 - **Intelligent Categorization**: Auto-categorizes transactions into 15+ categories
-  - Dining, Grocery, Gas, Shopping, Airlines, Healthcare, Insurance
+  - Dining, Grocery, Gas, Shopping, Airlines, Healthcare, Insurance, Travel
   - Software/Tech, Subscriptions, Utilities, Entertainment, Transportation
+- **Category Normalization**: Automatically maps Apple Card categories to standard categories
+  - Prevents duplicate categories (e.g., "Restaurants" → "Dining")
 - **Transfer Detection**: Automatically identifies account transfers to avoid double-counting
 - **Toggle View**: Switch between "All Transactions" and "Actual Spending" with one click
 - **Customizable Categories**: Easy keyword-based system you can extend
 
+### 💰 Monthly Budget Tracking
+- **Set Budget Limits**: Define monthly spending limits per category
+- **Visual Progress Bars**: Color-coded indicators show budget status
+  - 🟢 Green: Under 80% (on track)
+  - 🟡 Orange: 80-100% (approaching limit)
+  - 🔴 Red: Over 100% (over budget!)
+- **Historical View**: Check budget performance for previous months
+- **Smart Exclusions**: Automatically excludes transfers and payments
+- **Collapsible Section**: Minimize to save screen space (state persists)
+
 ### 📈 Visual Dashboard
 - **Interactive Pie Chart**: See spending breakdown by category
 - **Monthly Trend Chart**: Track spending vs income over time
+- **Budget Progress Bars**: Visual tracking of spending vs budget limits
 - **Summary Cards**: Total transactions, spending, income, and net balance
 - **Transaction Table**: Searchable, filterable list with 100 most recent transactions
+- **Collapsible Sections**: Minimize budget tracker to focus on what matters
 
 ### 🔧 Data Management
 - **Drag-and-drop CSV import** in web interface
@@ -47,9 +61,10 @@ pip install -r requirements.txt
 
 **Required packages:**
 - Flask 3.0.0 (web framework)
-- Pandas 2.1.4 (data processing)
-- Plotly 5.18.0 (interactive charts)
+- Pandas 2.1.4 (CSV parsing and data processing)
 - python-dateutil 2.8.2 (date parsing)
+
+**Note:** Charts use Plotly.js via CDN (no Python plotly package needed)
 
 ### 2. Import Your Transaction Data
 
@@ -143,10 +158,13 @@ python3 import_csv.py ~/Downloads/amex-feb-2026.csv --stats
 
 ### Analyzing Spending
 
-1. **Check the box** to exclude transfers
+1. **Check the box** to exclude transfers and payments (avoid double-counting)
 2. **Look at pie chart** to see where money goes
 3. **Review monthly trends** to spot increases
-4. **Scroll through transactions** to find unexpected charges
+4. **Set budgets** by clicking "⚙️ Set Budgets" in the budget section
+5. **Track progress** with color-coded progress bars
+6. **View history** using the month dropdown to see past performance
+7. **Scroll through transactions** to find unexpected charges
 
 ## 🔧 Customization
 
@@ -203,7 +221,9 @@ if 'Unique Column Name' in header:
 
 ## 📊 Data Storage
 
-All transactions are stored in `transactions.db` (SQLite) with this schema:
+All data is stored in `transactions.db` (SQLite) with two main tables:
+
+### Transactions Table
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -220,6 +240,16 @@ All transactions are stored in `transactions.db` (SQLite) with this schema:
 | created_at | TIMESTAMP | When imported |
 
 **Indexes:** date, category, account_type for fast queries
+
+### Budgets Table
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Auto-incrementing primary key |
+| category | TEXT | Category name (unique) |
+| monthly_limit | REAL | Monthly spending limit |
+| created_at | TIMESTAMP | When budget was created |
+| updated_at | TIMESTAMP | When budget was last updated |
 
 ## 🔒 Privacy & Security
 
@@ -258,18 +288,26 @@ All transactions are stored in `transactions.db` (SQLite) with this schema:
 - Edit `csv_parser.py` line 191 to add merchant keywords
 - Clear database and re-import: `python3 import_csv.py -d /path --clear`
 
+## 🎉 Recently Added (v2.0)
+
+- [x] **Monthly budget tracking** with visual progress bars
+- [x] **Budget alerts** (color-coded warnings)
+- [x] **Category normalization** (merged duplicate categories)
+- [x] **Collapsible sections** for cleaner UI
+- [x] **Transfer/Payment toggle** to avoid double-counting
+
 ## 🚀 Future Enhancement Ideas
 
-- [ ] Budget tracking and alerts
-- [ ] Recurring transaction detection
+- [ ] Recurring transaction detection and alerts
 - [ ] Export to Excel/PDF reports
 - [ ] Year-over-year comparisons
 - [ ] Spending predictions with trends
 - [ ] Bill payment reminders
-- [ ] Search and advanced filtering
+- [ ] Search and advanced filtering in transaction table
 - [ ] Category editing in UI (no code changes)
 - [ ] Multi-currency support
 - [ ] Mobile-responsive design improvements
+- [ ] Savings goals tracker
 
 ## 📝 Technical Details
 
