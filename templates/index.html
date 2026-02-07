@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction X-Ray | Financial Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .stat-card h3 {
+            color: #666;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .stat-value.positive {
+            color: #10b981;
+        }
+
+        .stat-value.negative {
+            color: #ef4444;
+        }
+
+        .charts-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .chart-title {
+            font-size: 1.3em;
+            color: #333;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .transactions-section {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .filter-section {
+            background: #f0f9ff;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 2px solid #667eea;
+        }
+
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 1.05em;
+        }
+
+        .toggle-container input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-right: 12px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .toggle-label {
+            font-weight: 500;
+            color: #333;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        thead {
+            background: #f8f9fa;
+        }
+
+        th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        tbody tr:hover {
+            background: #f9fafb;
+        }
+
+        .amount-positive {
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .amount-negative {
+            color: #ef4444;
+            font-weight: 600;
+        }
+
+        .category-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: #e0e7ff;
+            color: #4c51bf;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+
+        .account-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+
+        .account-amex {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .account-apple {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .account-checking {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 1.2em;
+        }
+
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .success {
+            background: #dcfce7;
+            color: #166534;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        @media (max-width: 768px) {
+            .charts-section {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 1.8em;
+            }
+
+            table {
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>💰 Transaction X-Ray</h1>
+            <p class="subtitle">Your complete financial health dashboard</p>
+        </header>
+
+        <div class="stats-grid" id="stats-grid">
+            <div class="stat-card">
+                <h3>Total Transactions</h3>
+                <div class="stat-value" id="total-transactions">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Spent</h3>
+                <div class="stat-value negative" id="total-spent">$0.00</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Income</h3>
+                <div class="stat-value positive" id="total-income">$0.00</div>
+            </div>
+            <div class="stat-card">
+                <h3>Net</h3>
+                <div class="stat-value" id="net-amount">$0.00</div>
+            </div>
+        </div>
+
+        <div class="charts-section">
+            <div class="chart-card">
+                <div class="chart-title">📊 Spending by Category</div>
+                <div id="category-chart"></div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">📈 Monthly Trend</div>
+                <div id="monthly-chart"></div>
+            </div>
+        </div>
+
+        <div class="transactions-section">
+            <div class="chart-title">Recent Transactions</div>
+
+            <div class="filter-section">
+                <label class="toggle-container">
+                    <input type="checkbox" id="exclude-transfers" onchange="refreshData()">
+                    <span class="toggle-label">💡 Exclude Transfers & Payments (show actual spending only)</span>
+                </label>
+            </div>
+
+            <div class="controls">
+                <div class="file-input-wrapper">
+                    <button class="btn btn-primary">📁 Import CSV Files</button>
+                    <input type="file" id="csv-upload" multiple accept=".csv">
+                </div>
+                <button class="btn btn-primary" onclick="loadAllCSVs()">📂 Load All Parent Directory CSVs</button>
+                <button class="btn btn-primary" onclick="refreshData()">🔄 Refresh</button>
+                <button class="btn btn-danger" onclick="clearAllData()">🗑️ Clear All Data</button>
+            </div>
+
+            <div id="message-area"></div>
+
+            <table id="transactions-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th>Category</th>
+                        <th>Account</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody id="transactions-body">
+                    <tr>
+                        <td colspan="5" class="loading">Loading transactions...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Load data on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshData();
+        });
+
+        // Handle file upload
+        document.getElementById('csv-upload').addEventListener('change', function(e) {
+            const files = e.target.files;
+            if (files.length === 0) return;
+
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
+            }
+
+            showMessage('Importing files...', 'info');
+
+            fetch('/api/import', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                showMessage(`Successfully imported ${data.imported} transactions from ${data.files_processed} file(s)!`, 'success');
+                refreshData();
+                e.target.value = ''; // Reset file input
+            })
+            .catch(err => {
+                showMessage('Error importing files: ' + err.message, 'error');
+            });
+        });
+
+        function loadAllCSVs() {
+            showMessage('Loading all CSV files from parent directory...', 'info');
+
+            fetch('/api/import-directory', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    directory: '/Users/henrypendleton/Desktop/Finance'
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.errors && data.errors.length > 0) {
+                    showMessage(`Imported ${data.imported} transactions. Errors: ${data.errors.join(', ')}`, 'warning');
+                } else {
+                    showMessage(`Successfully imported ${data.imported} transactions from ${data.files_processed} file(s)!`, 'success');
+                }
+                refreshData();
+            })
+            .catch(err => {
+                showMessage('Error loading files: ' + err.message, 'error');
+            });
+        }
+
+        function refreshData() {
+            loadStats();
+            loadTransactions();
+            loadCharts();
+        }
+
+        function shouldExcludeTransfers() {
+            return document.getElementById('exclude-transfers').checked;
+        }
+
+        function loadStats() {
+            fetch('/api/transactions')
+                .then(res => res.json())
+                .then(allTransactions => {
+                    let transactions = allTransactions;
+
+                    // Filter out transfers if checkbox is checked
+                    if (shouldExcludeTransfers()) {
+                        transactions = transactions.filter(t =>
+                            t.category !== 'Transfer' && t.category !== 'Payment'
+                        );
+                    }
+
+                    const totalSpent = transactions.filter(t => t.amount > 0)
+                        .reduce((sum, t) => sum + t.amount, 0);
+                    const totalIncome = transactions.filter(t => t.amount < 0)
+                        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+                    document.getElementById('total-transactions').textContent = transactions.length.toLocaleString();
+                    document.getElementById('total-spent').textContent = '$' + totalSpent.toLocaleString('en-US', {minimumFractionDigits: 2});
+                    document.getElementById('total-income').textContent = '$' + totalIncome.toLocaleString('en-US', {minimumFractionDigits: 2});
+
+                    const netEl = document.getElementById('net-amount');
+                    const net = totalIncome - totalSpent;
+                    netEl.textContent = '$' + net.toLocaleString('en-US', {minimumFractionDigits: 2});
+                    netEl.className = 'stat-value ' + (net >= 0 ? 'positive' : 'negative');
+                });
+        }
+
+        function loadTransactions() {
+            fetch('/api/transactions?limit=100')
+                .then(res => res.json())
+                .then(allData => {
+                    let data = allData;
+
+                    // Filter out transfers if checkbox is checked
+                    if (shouldExcludeTransfers()) {
+                        data = data.filter(t =>
+                            t.category !== 'Transfer' && t.category !== 'Payment'
+                        );
+                    }
+
+                    const tbody = document.getElementById('transactions-body');
+                    if (data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="5" class="loading">No transactions found. Import some CSV files to get started!</td></tr>';
+                        return;
+                    }
+
+                    tbody.innerHTML = data.map(t => `
+                        <tr>
+                            <td>${t.date}</td>
+                            <td>${t.description}</td>
+                            <td><span class="category-badge">${t.category || 'Uncategorized'}</span></td>
+                            <td><span class="account-badge account-${t.account_type.toLowerCase().replace(' ', '-')}">${t.account_type}</span></td>
+                            <td class="${t.amount < 0 ? 'amount-positive' : 'amount-negative'}">
+                                ${t.amount < 0 ? '+' : '-'}$${Math.abs(t.amount).toLocaleString('en-US', {minimumFractionDigits: 2})}
+                            </td>
+                        </tr>
+                    `).join('');
+                });
+        }
+
+        function loadCharts() {
+            // Fetch all transactions and calculate charts client-side
+            fetch('/api/transactions')
+                .then(res => res.json())
+                .then(allTransactions => {
+                    let transactions = allTransactions;
+
+                    // Filter out transfers if checkbox is checked
+                    if (shouldExcludeTransfers()) {
+                        transactions = transactions.filter(t =>
+                            t.category !== 'Transfer' && t.category !== 'Payment'
+                        );
+                    }
+
+                    // Calculate category spending
+                    const categoryTotals = {};
+                    transactions.filter(t => t.amount > 0).forEach(t => {
+                        const cat = t.category || 'Uncategorized';
+                        categoryTotals[cat] = (categoryTotals[cat] || 0) + t.amount;
+                    });
+
+                    const categoryLabels = Object.keys(categoryTotals).sort((a, b) => categoryTotals[b] - categoryTotals[a]);
+                    const categoryValues = categoryLabels.map(cat => categoryTotals[cat]);
+
+                    // Category pie chart
+                    const pieData = [{
+                        values: categoryValues,
+                        labels: categoryLabels,
+                        type: 'pie',
+                        hole: 0.4,
+                        marker: {
+                            colors: ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a', '#fee140', '#30cfd0']
+                        }
+                    }];
+
+                    const pieLayout = {
+                        height: 400,
+                        margin: {t: 0, b: 0, l: 0, r: 0},
+                        showlegend: true,
+                        legend: {orientation: 'h', y: -0.1}
+                    };
+
+                    Plotly.newPlot('category-chart', pieData, pieLayout, {responsive: true});
+
+                    // Calculate monthly trend
+                    const monthlyData = {};
+                    transactions.forEach(t => {
+                        const month = t.date.substring(0, 7); // YYYY-MM
+                        if (!monthlyData[month]) {
+                            monthlyData[month] = { spending: 0, income: 0 };
+                        }
+                        if (t.amount > 0) {
+                            monthlyData[month].spending += t.amount;
+                        } else {
+                            monthlyData[month].income += Math.abs(t.amount);
+                        }
+                    });
+
+                    const months = Object.keys(monthlyData).sort();
+                    const spending = months.map(m => monthlyData[m].spending);
+                    const income = months.map(m => monthlyData[m].income);
+
+                    // Monthly trend chart
+                    const traces = [
+                        {
+                            x: months,
+                            y: spending,
+                            type: 'bar',
+                            name: 'Spending',
+                            marker: {color: '#ef4444'}
+                        },
+                        {
+                            x: months,
+                            y: income,
+                            type: 'bar',
+                            name: 'Income',
+                            marker: {color: '#10b981'}
+                        }
+                    ];
+
+                    const trendLayout = {
+                        height: 400,
+                        margin: {t: 20, b: 40, l: 60, r: 20},
+                        barmode: 'group',
+                        xaxis: {title: 'Month'},
+                        yaxis: {title: 'Amount ($)'},
+                        showlegend: true,
+                        legend: {orientation: 'h', y: 1.1}
+                    };
+
+                    Plotly.newPlot('monthly-chart', traces, trendLayout, {responsive: true});
+                });
+        }
+
+        function clearAllData() {
+            if (!confirm('Are you sure you want to delete ALL transactions? This cannot be undone!')) {
+                return;
+            }
+
+            fetch('/api/clear-data', {method: 'POST'})
+                .then(res => res.json())
+                .then(data => {
+                    showMessage('All data cleared successfully', 'success');
+                    refreshData();
+                });
+        }
+
+        function showMessage(message, type) {
+            const messageArea = document.getElementById('message-area');
+            const className = type === 'error' ? 'error' : (type === 'success' ? 'success' : 'info');
+            messageArea.innerHTML = `<div class="${className}">${message}</div>`;
+
+            setTimeout(() => {
+                messageArea.innerHTML = '';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
