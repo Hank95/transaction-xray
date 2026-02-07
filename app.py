@@ -7,9 +7,7 @@ import os
 from pathlib import Path
 from database import TransactionDatabase
 from csv_parser import CSVParser
-import plotly.graph_objects as go
-import plotly.express as px
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
 
 app = Flask(__name__)
