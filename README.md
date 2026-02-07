@@ -2,7 +2,7 @@
 
 A powerful Python + HTML web application for analyzing your financial transactions from multiple bank accounts. Break free from Excel and get deep insights into your spending, income, and budgeting with intelligent categorization and interactive visualizations.
 
-![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![Version](https://img.shields.io/badge/version-2.1.0-blue)
 ![Python](https://img.shields.io/badge/python-3.11+-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 
@@ -16,13 +16,18 @@ Automatically parses and normalizes CSV files from:
 - Easy to extend for other banks by adding custom parsers
 
 ### 📊 Smart Financial Analysis
-- **Intelligent Categorization**: Auto-categorizes transactions into 15+ categories
-  - Dining, Grocery, Gas, Shopping, Airlines, Healthcare, Insurance, Travel
+- **Intelligent Categorization**: Auto-categorizes transactions into 17+ categories
+  - Dining, Grocery, Gas, Shopping, Sports/Exercise, Airlines, Healthcare, Insurance, Travel
   - Software/Tech, Subscriptions, Utilities, Entertainment, Transportation
+- **Learning Categorizer**: Interactive modal to categorize "Other" transactions
+  - Click, categorize, and the system learns merchant patterns automatically
+  - Learned patterns take priority over keyword rules
+  - Retroactively updates ALL matching transactions
+  - Applies to future imports automatically
 - **Category Normalization**: Automatically maps Apple Card categories to standard categories
   - Prevents duplicate categories (e.g., "Restaurants" → "Dining")
 - **Transfer Detection**: Automatically identifies account transfers to avoid double-counting
-- **Toggle View**: Switch between "All Transactions" and "Actual Spending" with one click
+- **Persistent Toggle**: Transfer/Payment filter at top of page (state saved in localStorage)
 - **Customizable Categories**: Easy keyword-based system you can extend
 
 ### 💰 Monthly Budget Tracking
@@ -94,9 +99,11 @@ python3 import_csv.py -d /path/to/csv/files --clear --stats
 
 Navigate to **http://localhost:8000** and explore:
 - Toggle "Exclude Transfers & Payments" to see actual spending
+- Click "🏷️ Categorize 'Other' Transactions" to teach the system new patterns
 - Click on pie chart sections to drill down
 - Scroll down to view recent transactions
 - Use the monthly trend to spot patterns
+- Set budgets and track your spending goals
 
 ## 💡 Understanding Double-Counting
 
@@ -116,6 +123,42 @@ Use the **"💡 Exclude Transfers & Payments"** checkbox to:
 **Example from this dataset:**
 - With transfers included: $239,355 total
 - With transfers excluded: $120,834 actual spending
+
+## 🎓 Teaching the System: Smart Categorization
+
+Transaction X-Ray learns from you! When transactions are categorized as "Other", you can teach the system to recognize them automatically.
+
+### How It Works
+
+1. **Click** "🏷️ Categorize 'Other' Transactions" at the top of the dashboard
+2. **Review** uncategorized transactions in the modal
+3. **Select** the correct category from the dropdown
+4. **Click ✓** to save
+
+### What Happens Next
+
+The system:
+- 🧠 **Extracts the merchant pattern** (e.g., "TWO BLOKES BREWI" from "FSP*TWO BLOKES BREWIMOUNT PLEASAN SC")
+- 💾 **Saves it to the database** for future use
+- 🔄 **Updates ALL matching transactions** retroactively
+- ✨ **Applies to future imports** automatically
+
+### Smart Pattern Extraction
+
+The categorizer intelligently removes:
+- Common prefixes (FSP*, TST*, CTLP*, SQ *)
+- State abbreviations and ZIP codes
+- Extra whitespace and transaction IDs
+
+This ensures accurate matching without being too specific or too generic.
+
+### Example
+
+**Transaction:** `FSP*TWO BLOKES BREWIMOUNT PLEASAN       SC`
+**Pattern extracted:** `TWO BLOKES BREWIMOUNT PLEASAN`
+**Result:** All future "TWO BLOKES BREWI" transactions → automatically categorized as Dining
+
+The more you teach it, the smarter it gets! Learned patterns take priority over keyword rules.
 
 ## 📁 Project Structure
 
@@ -159,18 +202,25 @@ python3 import_csv.py ~/Downloads/amex-feb-2026.csv --stats
 ### Analyzing Spending
 
 1. **Check the box** to exclude transfers and payments (avoid double-counting)
-2. **Look at pie chart** to see where money goes
-3. **Review monthly trends** to spot increases
-4. **Set budgets** by clicking "⚙️ Set Budgets" in the budget section
-5. **Track progress** with color-coded progress bars
-6. **View history** using the month dropdown to see past performance
-7. **Scroll through transactions** to find unexpected charges
+2. **Teach the system** by clicking "🏷️ Categorize 'Other' Transactions" to improve accuracy
+3. **Look at pie chart** to see where money goes
+4. **Review monthly trends** to spot increases
+5. **Set budgets** by clicking "⚙️ Set Budgets" in the budget section
+6. **Track progress** with color-coded progress bars
+7. **View history** using the month dropdown to see past performance
+8. **Scroll through transactions** to find unexpected charges
 
 ## 🔧 Customization
 
 ### Adding New Categories
 
-Edit `csv_parser.py` at line 191:
+**Option A: Use the UI Categorizer (Recommended)**
+
+Simply click "🏷️ Categorize 'Other' Transactions" and teach the system by categorizing transactions. The system learns and applies patterns automatically!
+
+**Option B: Edit Keyword Rules**
+
+For broader keyword-based rules, edit `csv_parser.py` at line ~250:
 
 ```python
 categories = {
@@ -221,7 +271,7 @@ if 'Unique Column Name' in header:
 
 ## 📊 Data Storage
 
-All data is stored in `transactions.db` (SQLite) with two main tables:
+All data is stored in `transactions.db` (SQLite) with three main tables:
 
 ### Transactions Table
 
@@ -250,6 +300,17 @@ All data is stored in `transactions.db` (SQLite) with two main tables:
 | monthly_limit | REAL | Monthly spending limit |
 | created_at | TIMESTAMP | When budget was created |
 | updated_at | TIMESTAMP | When budget was last updated |
+
+### Category Mappings Table
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Auto-incrementing primary key |
+| merchant_pattern | TEXT | Merchant name pattern (unique) |
+| category | TEXT | Assigned category |
+| created_at | TIMESTAMP | When pattern was learned |
+
+**Purpose:** Stores learned merchant patterns from the categorizer. These patterns take priority over keyword-based rules during import and recategorization.
 
 ## 🔒 Privacy & Security
 
@@ -288,8 +349,18 @@ All data is stored in `transactions.db` (SQLite) with two main tables:
 - Edit `csv_parser.py` line 191 to add merchant keywords
 - Clear database and re-import: `python3 import_csv.py -d /path --clear`
 
-## 🎉 Recently Added (v2.0)
+## 🎉 Recently Added
 
+### v2.1 (Latest)
+- [x] **Learning Categorizer** - Interactive modal to teach transaction patterns
+- [x] **Smart Pattern Extraction** - Removes noise, keeps core merchant names
+- [x] **Retroactive Updates** - All matching transactions recategorized automatically
+- [x] **Sports/Exercise Category** - Gym, fitness, yoga, running, etc.
+- [x] **Improved Error Handling** - Visible warnings and debug logging
+- [x] **Persistent Toggle State** - Transfer filter saves to localStorage
+- [x] **Amazon Marketplace Fix** - MKTPL transactions now categorize as Shopping
+
+### v2.0
 - [x] **Monthly budget tracking** with visual progress bars
 - [x] **Budget alerts** (color-coded warnings)
 - [x] **Category normalization** (merged duplicate categories)
@@ -304,10 +375,11 @@ All data is stored in `transactions.db` (SQLite) with two main tables:
 - [ ] Spending predictions with trends
 - [ ] Bill payment reminders
 - [ ] Search and advanced filtering in transaction table
-- [ ] Category editing in UI (no code changes)
 - [ ] Multi-currency support
 - [ ] Mobile-responsive design improvements
 - [ ] Savings goals tracker
+- [ ] Bulk edit/merge categories
+- [ ] Custom category creation from UI
 
 ## 📝 Technical Details
 
