@@ -70,6 +70,26 @@ class TransactionDatabase:
             )
         """)
 
+        # Recurring transactions table for subscription/bill detection
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS recurring_transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                merchant_pattern TEXT NOT NULL UNIQUE,
+                category TEXT,
+                frequency TEXT NOT NULL,
+                average_amount REAL NOT NULL,
+                last_amount REAL,
+                last_date TEXT,
+                occurrence_count INTEGER DEFAULT 0,
+                amount_variance REAL DEFAULT 0,
+                is_active INTEGER DEFAULT 1,
+                is_subscription INTEGER DEFAULT 0,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         conn.commit()
         conn.close()
 
@@ -216,6 +236,59 @@ class TransactionDatabase:
         conn.close()
 
         return [dict(row) for row in rows]
+
+    def get_category_trends(self) -> Dict:
+        """Get spending trends by category over time"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                strftime('%Y-%m', date) as month,
+                COALESCE(category, 'Uncategorized') as category,
+                SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as total_spent
+            FROM transactions
+            WHERE category NOT IN ('Transfer', 'Payment', 'Income')
+            GROUP BY month, category
+            ORDER BY month, category
+        """)
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        # Reorganize data by category
+        trends_by_category = {}
+        all_months = set()
+
+        for row in rows:
+            month = row['month']
+            category = row['category']
+            amount = row['total_spent']
+
+            all_months.add(month)
+
+            if category not in trends_by_category:
+                trends_by_category[category] = {}
+
+            trends_by_category[category][month] = amount
+
+        # Convert to list format for Plotly
+        months = sorted(list(all_months))
+        category_data = []
+
+        for category, month_data in trends_by_category.items():
+            values = [month_data.get(month, 0) for month in months]
+            category_data.append({
+                'category': category,
+                'months': months,
+                'values': values
+            })
+
+        return {
+            'months': months,
+            'categories': category_data
+        }
 
     def get_account_summary(self) -> List[Dict]:
         """Get spending summary by account"""
@@ -430,5 +503,163 @@ class TransactionDatabase:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("DELETE FROM category_mappings WHERE id = ?", (mapping_id,))
+        conn.commit()
+        conn.close()
+
+    # Recurring Transaction Detection Methods
+
+    def detect_recurring_transactions(self) -> int:
+        """Analyze transactions to detect recurring patterns"""
+        from datetime import datetime
+        from collections import defaultdict
+
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Get all transactions with positive amounts (expenses), sorted by merchant and date
+        cursor.execute("""
+            SELECT id, date, description, merchant, category, amount
+            FROM transactions
+            WHERE amount > 0
+            ORDER BY merchant, date
+        """)
+
+        transactions = cursor.fetchall()
+
+        # Group transactions by merchant
+        merchant_groups = defaultdict(list)
+        for t in transactions:
+            merchant = t['merchant'] or t['description'][:30]  # Use first 30 chars if no merchant
+            merchant_groups[merchant].append({
+                'date': t['date'],
+                'amount': t['amount'],
+                'category': t['category']
+            })
+
+        detected_count = 0
+
+        # Analyze each merchant group
+        for merchant, txns in merchant_groups.items():
+            if len(txns) < 3:  # Need at least 3 occurrences
+                continue
+
+            # Calculate intervals between transactions
+            dates = [datetime.strptime(t['date'], '%Y-%m-%d') for t in txns]
+            intervals = [(dates[i+1] - dates[i]).days for i in range(len(dates) - 1)]
+
+            if not intervals:
+                continue
+
+            avg_interval = sum(intervals) / len(intervals)
+
+            # Determine if it's recurring based on interval consistency
+            # Allow 20% variance in interval
+            is_recurring = False
+            frequency = None
+
+            if 6 <= avg_interval <= 9:  # Weekly (7 days ± 2)
+                is_recurring = all(5 <= i <= 10 for i in intervals)
+                frequency = 'weekly'
+            elif 25 <= avg_interval <= 35:  # Monthly (30 days ± 5)
+                is_recurring = all(20 <= i <= 40 for i in intervals)
+                frequency = 'monthly'
+            elif 85 <= avg_interval <= 95:  # Quarterly (90 days ± 5)
+                is_recurring = all(80 <= i <= 100 for i in intervals)
+                frequency = 'quarterly'
+            elif 350 <= avg_interval <= 380:  # Annual (365 days ± 15)
+                is_recurring = all(340 <= i <= 390 for i in intervals)
+                frequency = 'annual'
+
+            if is_recurring and frequency:
+                amounts = [t['amount'] for t in txns]
+                avg_amount = sum(amounts) / len(amounts)
+                last_amount = amounts[-1]
+                last_date = txns[-1]['date']
+                category = txns[0]['category']
+
+                # Calculate amount variance
+                amount_variance = max(amounts) - min(amounts)
+
+                # Determine if it's likely a subscription
+                is_subscription = (
+                    frequency in ['monthly', 'annual'] and
+                    amount_variance < avg_amount * 0.1 and  # Less than 10% variance
+                    category in ['Subscriptions', 'Software/Tech', 'Entertainment']
+                )
+
+                # Save to recurring_transactions table
+                cursor.execute("""
+                    INSERT INTO recurring_transactions
+                    (merchant_pattern, category, frequency, average_amount, last_amount,
+                     last_date, occurrence_count, amount_variance, is_subscription)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(merchant_pattern)
+                    DO UPDATE SET
+                        category = ?,
+                        frequency = ?,
+                        average_amount = ?,
+                        last_amount = ?,
+                        last_date = ?,
+                        occurrence_count = ?,
+                        amount_variance = ?,
+                        is_subscription = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                """, (merchant, category, frequency, avg_amount, last_amount, last_date,
+                      len(txns), amount_variance, int(is_subscription),
+                      category, frequency, avg_amount, last_amount, last_date,
+                      len(txns), amount_variance, int(is_subscription)))
+
+                detected_count += 1
+
+        conn.commit()
+        conn.close()
+
+        return detected_count
+
+    def get_recurring_transactions(self, active_only: bool = True) -> List[Dict]:
+        """Get all detected recurring transactions"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        query = "SELECT * FROM recurring_transactions"
+        if active_only:
+            query += " WHERE is_active = 1"
+        query += " ORDER BY frequency, average_amount DESC"
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [dict(row) for row in rows]
+
+    def update_recurring_transaction(self, recurring_id: int, updates: Dict) -> None:
+        """Update a recurring transaction record"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        set_clauses = []
+        values = []
+
+        for key, value in updates.items():
+            set_clauses.append(f"{key} = ?")
+            values.append(value)
+
+        if set_clauses:
+            set_clauses.append("updated_at = CURRENT_TIMESTAMP")
+            values.append(recurring_id)
+
+            query = f"UPDATE recurring_transactions SET {', '.join(set_clauses)} WHERE id = ?"
+            cursor.execute(query, values)
+            conn.commit()
+
+        conn.close()
+
+    def delete_recurring_transaction(self, recurring_id: int) -> None:
+        """Delete a recurring transaction record"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM recurring_transactions WHERE id = ?", (recurring_id,))
         conn.commit()
         conn.close()

@@ -113,6 +113,13 @@ def monthly_trend_chart():
     })
 
 
+@app.route('/api/charts/category-trends')
+def category_trends_chart():
+    """Generate category spending trends over time"""
+    trends = db.get_category_trends()
+    return jsonify(trends)
+
+
 @app.route('/api/import', methods=['POST'])
 def import_csv():
     """Import CSV file(s) into database"""
@@ -298,6 +305,50 @@ def delete_category_mapping(mapping_id):
     """Delete a category mapping"""
     db.delete_category_mapping(mapping_id)
     return jsonify({'message': 'Mapping deleted successfully'})
+
+
+# Recurring Transaction API Endpoints
+
+@app.route('/api/recurring/detect', methods=['POST'])
+def detect_recurring():
+    """Detect recurring transactions and save patterns"""
+    try:
+        count = db.detect_recurring_transactions()
+        return jsonify({
+            'message': f'Detected {count} recurring transaction patterns',
+            'count': count
+        })
+    except Exception as e:
+        print(f"[ERROR] Exception in detect_recurring: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/recurring', methods=['GET'])
+def get_recurring():
+    """Get all detected recurring transactions"""
+    active_only = request.args.get('active_only', 'true').lower() == 'true'
+    recurring = db.get_recurring_transactions(active_only=active_only)
+    return jsonify(recurring)
+
+
+@app.route('/api/recurring/<int:recurring_id>', methods=['PUT'])
+def update_recurring(recurring_id):
+    """Update a recurring transaction"""
+    data = request.get_json()
+    try:
+        db.update_recurring_transaction(recurring_id, data)
+        return jsonify({'message': 'Updated successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/recurring/<int:recurring_id>', methods=['DELETE'])
+def delete_recurring(recurring_id):
+    """Delete a recurring transaction"""
+    db.delete_recurring_transaction(recurring_id)
+    return jsonify({'message': 'Deleted successfully'})
 
 
 if __name__ == '__main__':

@@ -340,6 +340,95 @@
             color: #666;
         }
 
+        .recurring-item {
+            background: #f9fafb;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .recurring-item.subscription {
+            border-left-color: #10b981;
+        }
+
+        .recurring-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .recurring-merchant {
+            font-weight: 600;
+            font-size: 1.1em;
+            color: #333;
+        }
+
+        .recurring-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+
+        .recurring-badge.monthly {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .recurring-badge.weekly {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .recurring-badge.quarterly {
+            background: #e0e7ff;
+            color: #4c51bf;
+        }
+
+        .recurring-badge.annual {
+            background: #fce7f3;
+            color: #9f1239;
+        }
+
+        .recurring-badge.subscription {
+            background: #d1fae5;
+            color: #065f46;
+            margin-left: 8px;
+        }
+
+        .recurring-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        .recurring-detail-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .recurring-detail-label {
+            font-size: 0.85em;
+            color: #999;
+            margin-bottom: 4px;
+        }
+
+        .recurring-detail-value {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .recurring-actions {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -672,6 +761,22 @@
             </div>
         </div>
 
+        <div class="chart-card" style="margin-bottom: 30px;">
+            <div class="chart-title">📈 Category Trends Over Time</div>
+            <div id="category-trends-chart" style="height: 500px;"></div>
+        </div>
+
+        <div class="budget-section">
+            <div class="chart-title" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>🔄 Recurring Transactions & Subscriptions</span>
+                <button class="btn btn-primary" onclick="detectRecurring()">🔍 Detect Recurring</button>
+            </div>
+
+            <div id="recurring-content" style="margin-top: 20px;">
+                <div id="recurring-list"></div>
+            </div>
+        </div>
+
         <div class="budget-section">
             <div class="chart-title" style="display: flex; justify-content: space-between; align-items: center;">
                 <span>📅 Monthly Budget Tracker</span>
@@ -797,6 +902,7 @@
             loadStats();
             loadTransactions();
             loadCharts();
+            loadRecurringTransactions();
         }
 
         function shouldExcludeTransfers() {
@@ -812,6 +918,86 @@
         function restoreTransferToggleState() {
             const excluded = localStorage.getItem('excludeTransfers') === 'true';
             document.getElementById('exclude-transfers').checked = excluded;
+        }
+
+        // Recurring Transactions Functions
+
+        function detectRecurring() {
+            showMessage('Analyzing transactions for recurring patterns...', 'info');
+
+            fetch('/api/recurring/detect', { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    showMessage(`✓ ${data.message}`, 'success');
+                    loadRecurringTransactions();
+                })
+                .catch(err => {
+                    showMessage('Error detecting recurring transactions: ' + err.message, 'error');
+                });
+        }
+
+        function loadRecurringTransactions() {
+            fetch('/api/recurring')
+                .then(res => res.json())
+                .then(recurring => {
+                    const listEl = document.getElementById('recurring-list');
+
+                    if (recurring.length === 0) {
+                        listEl.innerHTML = `
+                            <div class="budget-empty-state">
+                                <p>No recurring transactions detected yet.</p>
+                                <p style="font-size: 0.9em; color: #999;">Click "🔍 Detect Recurring" to analyze your transactions.</p>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    listEl.innerHTML = recurring.map(r => {
+                        const avgAmount = r.average_amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+                        const lastAmount = r.last_amount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+                        const amountChanged = Math.abs(r.last_amount - r.average_amount) > 1;
+                        const changePercent = ((r.last_amount - r.average_amount) / r.average_amount * 100).toFixed(1);
+
+                        return `
+                            <div class="recurring-item ${r.is_subscription ? 'subscription' : ''}">
+                                <div class="recurring-header">
+                                    <div>
+                                        <span class="recurring-merchant">${r.merchant_pattern}</span>
+                                        <span class="recurring-badge ${r.frequency}">${r.frequency}</span>
+                                        ${r.is_subscription ? '<span class="recurring-badge subscription">💳 Subscription</span>' : ''}
+                                    </div>
+                                    <span style="font-size: 1.2em; font-weight: bold; color: #667eea;">$${avgAmount}</span>
+                                </div>
+                                <div class="recurring-details">
+                                    <div class="recurring-detail-item">
+                                        <span class="recurring-detail-label">Category</span>
+                                        <span class="recurring-detail-value">${r.category || 'N/A'}</span>
+                                    </div>
+                                    <div class="recurring-detail-item">
+                                        <span class="recurring-detail-label">Occurrences</span>
+                                        <span class="recurring-detail-value">${r.occurrence_count}×</span>
+                                    </div>
+                                    <div class="recurring-detail-item">
+                                        <span class="recurring-detail-label">Last Payment</span>
+                                        <span class="recurring-detail-value">${r.last_date}</span>
+                                    </div>
+                                    <div class="recurring-detail-item">
+                                        <span class="recurring-detail-label">Last Amount</span>
+                                        <span class="recurring-detail-value" style="color: ${amountChanged ? '#ef4444' : '#333'}">
+                                            $${lastAmount}
+                                            ${amountChanged ? ` (${changePercent > 0 ? '+' : ''}${changePercent}%)` : ''}
+                                        </span>
+                                    </div>
+                                </div>
+                                ${amountChanged ? `
+                                    <div style="margin-top: 12px; padding: 10px; background: #fef2f2; border-radius: 6px; color: #991b1b; font-size: 0.9em;">
+                                        ⚠️ Amount changed by ${Math.abs(changePercent)}% from average
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                    }).join('');
+                });
         }
 
         function loadStats() {
@@ -993,6 +1179,55 @@
                     };
 
                     Plotly.newPlot('monthly-chart', traces, trendLayout, {responsive: true});
+                });
+
+            // Load category trends chart
+            loadCategoryTrends();
+        }
+
+        function loadCategoryTrends() {
+            fetch('/api/charts/category-trends')
+                .then(res => res.json())
+                .then(data => {
+                    const traces = data.categories.map(cat => ({
+                        x: cat.months,
+                        y: cat.values,
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        name: cat.category,
+                        line: {width: 2},
+                        marker: {size: 6}
+                    }));
+
+                    const layout = {
+                        height: 500,
+                        margin: {t: 40, b: 60, l: 70, r: 20},
+                        xaxis: {
+                            title: 'Month',
+                            tickangle: -45
+                        },
+                        yaxis: {
+                            title: 'Amount ($)',
+                            tickformat: '$,.0f'
+                        },
+                        hovermode: 'x unified',
+                        showlegend: true,
+                        legend: {
+                            orientation: 'v',
+                            x: 1.02,
+                            y: 1,
+                            xanchor: 'left'
+                        }
+                    };
+
+                    const config = {
+                        responsive: true,
+                        displayModeBar: true,
+                        displaylogo: false,
+                        modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
+                    };
+
+                    Plotly.newPlot('category-trends-chart', traces, layout, config);
                 });
         }
 
