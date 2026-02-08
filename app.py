@@ -127,7 +127,8 @@ def import_csv():
         return jsonify({'error': 'No files provided'}), 400
 
     files = request.files.getlist('files')
-    imported_count = 0
+    total_imported = 0
+    total_duplicates = 0
     errors = []
 
     for file in files:
@@ -138,8 +139,9 @@ def import_csv():
 
             # Parse and import
             transactions = parser.parse_file(temp_path)
-            count = db.insert_bulk(transactions)
-            imported_count += count
+            result = db.insert_bulk(transactions)
+            total_imported += result['inserted']
+            total_duplicates += result['duplicates']
 
             # Clean up
             os.remove(temp_path)
@@ -148,7 +150,8 @@ def import_csv():
             errors.append(f"{file.filename}: {str(e)}")
 
     response = {
-        'imported': imported_count,
+        'imported': total_imported,
+        'duplicates': total_duplicates,
         'files_processed': len(files) - len(errors)
     }
 
@@ -168,19 +171,22 @@ def import_directory():
         return jsonify({'error': 'Invalid directory'}), 400
 
     csv_files = list(Path(directory).glob('*.csv'))
-    imported_count = 0
+    total_imported = 0
+    total_duplicates = 0
     errors = []
 
     for csv_file in csv_files:
         try:
             transactions = parser.parse_file(str(csv_file))
-            count = db.insert_bulk(transactions)
-            imported_count += count
+            result = db.insert_bulk(transactions)
+            total_imported += result['inserted']
+            total_duplicates += result['duplicates']
         except Exception as e:
             errors.append(f"{csv_file.name}: {str(e)}")
 
     response = {
-        'imported': imported_count,
+        'imported': total_imported,
+        'duplicates': total_duplicates,
         'files_processed': len(csv_files) - len(errors)
     }
 

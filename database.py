@@ -6,6 +6,7 @@ import sqlite3
 from datetime import datetime
 from typing import List, Dict, Optional
 import json
+import hashlib
 
 
 class TransactionDatabase:
@@ -14,6 +15,13 @@ class TransactionDatabase:
     def __init__(self, db_path: str = "transactions.db"):
         self.db_path = db_path
         self.init_database()
+
+    @staticmethod
+    def generate_transaction_hash(transaction: Dict) -> str:
+        """Generate a unique hash for a transaction to detect duplicates"""
+        # Use date, amount, description, and account_type to create unique fingerprint
+        hash_string = f"{transaction['date']}|{transaction['amount']}|{transaction['description']}|{transaction['account_type']}"
+        return hashlib.md5(hash_string.encode()).hexdigest()
 
     def init_database(self):
         """Initialize the database schema"""
@@ -33,6 +41,7 @@ class TransactionDatabase:
                 account_name TEXT,
                 transaction_type TEXT,
                 raw_data TEXT,
+                transaction_hash TEXT UNIQUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -93,66 +102,132 @@ class TransactionDatabase:
         conn.commit()
         conn.close()
 
-    def insert_transaction(self, transaction: Dict) -> int:
-        """Insert a single transaction"""
+        # Migration: Add transaction_hash column if it doesn't exist
+        self._migrate_add_transaction_hash()
+
+    def _migrate_add_transaction_hash(self):
+        """Add transaction_hash column to existing databases"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
-        cursor.execute("""
-            INSERT INTO transactions
-            (date, description, merchant, category, amount, account_type,
-             account_name, transaction_type, raw_data)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            transaction['date'],
-            transaction['description'],
-            transaction.get('merchant'),
-            transaction.get('category'),
-            transaction['amount'],
-            transaction['account_type'],
-            transaction.get('account_name'),
-            transaction.get('transaction_type'),
-            json.dumps(transaction.get('raw_data', {}))
-        ))
+        # Check if column exists
+        cursor.execute("PRAGMA table_info(transactions)")
+        columns = [col[1] for col in cursor.fetchall()]
 
-        transaction_id = cursor.lastrowid
-        conn.commit()
+        if 'transaction_hash' not in columns:
+            print("[MIGRATION] Adding transaction_hash column...")
+            cursor.execute("ALTER TABLE transactions ADD COLUMN transaction_hash TEXT")
+
+            # Generate hashes for existing transactions
+            cursor.execute("SELECT id, date, description, amount, account_type FROM transactions")
+            rows = cursor.fetchall()
+
+            for row in rows:
+                trans_id, date, description, amount, account_type = row
+                transaction = {
+                    'date': date,
+                    'description': description,
+                    'amount': amount,
+                    'account_type': account_type
+                }
+                trans_hash = self.generate_transaction_hash(transaction)
+
+                cursor.execute("""
+                    UPDATE transactions SET transaction_hash = ? WHERE id = ?
+                """, (trans_hash, trans_id))
+
+            # Add unique constraint
+            try:
+                cursor.execute("CREATE UNIQUE INDEX idx_transaction_hash ON transactions(transaction_hash)")
+            except sqlite3.OperationalError:
+                # Index might already exist
+                pass
+
+            conn.commit()
+            print(f"[MIGRATION] Generated hashes for {len(rows)} existing transactions")
+
         conn.close()
 
-        return transaction_id
-
-    def insert_bulk(self, transactions: List[Dict]) -> int:
-        """Insert multiple transactions efficiently"""
+    def insert_transaction(self, transaction: Dict) -> Dict:
+        """Insert a single transaction, returns dict with id and duplicate status"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
-        data = [
-            (
-                t['date'],
-                t['description'],
-                t.get('merchant'),
-                t.get('category'),
-                t['amount'],
-                t['account_type'],
-                t.get('account_name'),
-                t.get('transaction_type'),
-                json.dumps(t.get('raw_data', {}))
-            )
-            for t in transactions
-        ]
+        # Generate hash for duplicate detection
+        transaction_hash = self.generate_transaction_hash(transaction)
 
-        cursor.executemany("""
-            INSERT INTO transactions
-            (date, description, merchant, category, amount, account_type,
-             account_name, transaction_type, raw_data)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, data)
+        try:
+            cursor.execute("""
+                INSERT INTO transactions
+                (date, description, merchant, category, amount, account_type,
+                 account_name, transaction_type, raw_data, transaction_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                transaction['date'],
+                transaction['description'],
+                transaction.get('merchant'),
+                transaction.get('category'),
+                transaction['amount'],
+                transaction['account_type'],
+                transaction.get('account_name'),
+                transaction.get('transaction_type'),
+                json.dumps(transaction.get('raw_data', {})),
+                transaction_hash
+            ))
 
-        count = cursor.rowcount
+            transaction_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+
+            return {'id': transaction_id, 'duplicate': False}
+        except sqlite3.IntegrityError:
+            # Duplicate transaction detected
+            conn.close()
+            return {'id': None, 'duplicate': True}
+
+    def insert_bulk(self, transactions: List[Dict]) -> Dict:
+        """Insert multiple transactions efficiently, returns stats with duplicate count"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        inserted_count = 0
+        duplicate_count = 0
+
+        for t in transactions:
+            transaction_hash = self.generate_transaction_hash(t)
+
+            try:
+                cursor.execute("""
+                    INSERT INTO transactions
+                    (date, description, merchant, category, amount, account_type,
+                     account_name, transaction_type, raw_data, transaction_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    t['date'],
+                    t['description'],
+                    t.get('merchant'),
+                    t.get('category'),
+                    t['amount'],
+                    t['account_type'],
+                    t.get('account_name'),
+                    t.get('transaction_type'),
+                    json.dumps(t.get('raw_data', {})),
+                    transaction_hash
+                ))
+                inserted_count += 1
+            except sqlite3.IntegrityError:
+                # Duplicate detected, skip it
+                duplicate_count += 1
+                continue
+
         conn.commit()
         conn.close()
 
-        return count
+        return {
+            'inserted': inserted_count,
+            'duplicates': duplicate_count,
+            'total_processed': len(transactions)
+        }
 
     def get_all_transactions(self, limit: Optional[int] = None) -> List[Dict]:
         """Retrieve all transactions, optionally limited"""
