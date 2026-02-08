@@ -2,7 +2,7 @@
 
 A powerful Python + HTML web application for analyzing your financial transactions from multiple bank accounts. Break free from Excel and get deep insights into your spending, income, and budgeting with intelligent categorization and interactive visualizations.
 
-![Version](https://img.shields.io/badge/version-2.1.0-blue)
+![Version](https://img.shields.io/badge/version-2.2.0-blue)
 ![Python](https://img.shields.io/badge/python-3.11+-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 
@@ -43,10 +43,27 @@ Automatically parses and normalizes CSV files from:
 ### 📈 Visual Dashboard
 - **Interactive Pie Chart**: See spending breakdown by category
 - **Monthly Trend Chart**: Track spending vs income over time
+- **Category Trends Over Time**: Multi-line chart showing spending patterns across all categories
+  - See which categories are increasing or decreasing month-over-month
+  - Interactive legend to toggle categories on/off
+  - Hover to see exact amounts for each category per month
 - **Budget Progress Bars**: Visual tracking of spending vs budget limits
-- **Summary Cards**: Total transactions, spending, income, and net balance
+- **Summary Cards**: Total transactions, spending, income, and net balance with date ranges
 - **Transaction Table**: Searchable, filterable list with 100 most recent transactions
 - **Collapsible Sections**: Minimize budget tracker to focus on what matters
+
+### 🔄 Recurring Transaction Detection
+- **Intelligent Pattern Recognition**: Automatically detects recurring charges
+  - Weekly, monthly, quarterly, and annual patterns
+  - Requires minimum 3 occurrences with consistent intervals
+- **Subscription Identification**: Flags likely subscriptions
+  - Low amount variance (<10%)
+  - Monthly or annual frequency
+  - Common subscription categories
+- **Amount Change Alerts**: Notifies when recurring payments change
+  - Compares last payment to average
+  - Visual warnings for significant changes (>20%)
+- **Detailed Tracking**: Shows frequency, occurrences, last payment date
 
 ### 🔧 Data Management
 - **Drag-and-drop CSV import** in web interface
@@ -160,6 +177,64 @@ This ensures accurate matching without being too specific or too generic.
 
 The more you teach it, the smarter it gets! Learned patterns take priority over keyword rules.
 
+## 🔄 Managing Recurring Transactions
+
+Track your subscriptions and recurring bills automatically with intelligent pattern detection.
+
+### How Detection Works
+
+The system analyzes all transactions to find patterns based on:
+1. **Merchant consistency** - Same merchant appearing multiple times
+2. **Interval regularity** - Payments occurring at consistent intervals
+3. **Amount stability** - Similar amounts each time (with variance tolerance)
+
+### Running Detection
+
+1. **Scroll to** "🔄 Recurring Transactions & Subscriptions" section
+2. **Click** "🔍 Detect Recurring" button
+3. **Review** detected patterns and subscriptions
+
+### What Gets Detected
+
+**Frequency Types:**
+- **Weekly** - Charges every 7 days (±2 days variance allowed)
+- **Monthly** - Charges every 30 days (±5 days variance allowed)
+- **Quarterly** - Charges every 90 days (±5 days variance allowed)
+- **Annual** - Charges every 365 days (±15 days variance allowed)
+
+**Qualification Criteria:**
+- Minimum 3 occurrences required
+- Consistent intervals within variance tolerance
+- Active transactions (not one-time purchases)
+
+### Subscription Identification
+
+Transactions are marked as subscriptions when:
+- Frequency is monthly or annual
+- Amount variance is less than 10%
+- Category is Subscriptions, Software/Tech, or Entertainment
+
+### Amount Change Alerts
+
+Get notified when recurring amounts change:
+- Compares last payment to historical average
+- Shows percentage change (e.g., "+15%" or "-8%")
+- Visual warning for changes >20%
+
+**Example Alert:**
+```
+⚠️ Amount changed by 25% from average
+Average: $20.00 → Last Payment: $25.00 (+25%)
+```
+
+### Typical Results
+
+From a 2-year dataset, you might see:
+- Netflix: Monthly subscription, $15.99, 24 payments
+- Spotify: Monthly subscription, $9.99, 24 payments
+- Car Insurance: Quarterly, $450.00, 8 payments
+- Amazon Prime: Annual, $139.00, 2 payments
+
 ## 📁 Project Structure
 
 ```
@@ -205,10 +280,12 @@ python3 import_csv.py ~/Downloads/amex-feb-2026.csv --stats
 2. **Teach the system** by clicking "🏷️ Categorize 'Other' Transactions" to improve accuracy
 3. **Look at pie chart** to see where money goes
 4. **Review monthly trends** to spot increases
-5. **Set budgets** by clicking "⚙️ Set Budgets" in the budget section
-6. **Track progress** with color-coded progress bars
-7. **View history** using the month dropdown to see past performance
-8. **Scroll through transactions** to find unexpected charges
+5. **Analyze category trends** to see which categories are growing or shrinking over time
+6. **Detect recurring charges** by clicking "🔍 Detect Recurring" to find subscriptions
+7. **Set budgets** by clicking "⚙️ Set Budgets" in the budget section
+8. **Track progress** with color-coded progress bars
+9. **View history** using the month dropdown to see past performance
+10. **Scroll through transactions** to find unexpected charges
 
 ## 🔧 Customization
 
@@ -271,7 +348,7 @@ if 'Unique Column Name' in header:
 
 ## 📊 Data Storage
 
-All data is stored in `transactions.db` (SQLite) with three main tables:
+All data is stored in `transactions.db` (SQLite) with four main tables:
 
 ### Transactions Table
 
@@ -312,6 +389,27 @@ All data is stored in `transactions.db` (SQLite) with three main tables:
 
 **Purpose:** Stores learned merchant patterns from the categorizer. These patterns take priority over keyword-based rules during import and recategorization.
 
+### Recurring Transactions Table
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Auto-incrementing primary key |
+| merchant_pattern | TEXT | Merchant identifier (unique) |
+| category | TEXT | Transaction category |
+| frequency | TEXT | weekly, monthly, quarterly, or annual |
+| average_amount | REAL | Historical average payment amount |
+| last_amount | REAL | Most recent payment amount |
+| last_date | TEXT | Date of last payment (YYYY-MM-DD) |
+| occurrence_count | INTEGER | Number of detected occurrences |
+| amount_variance | REAL | Difference between max and min amounts |
+| is_active | INTEGER | 1 if currently active, 0 if inactive |
+| is_subscription | INTEGER | 1 if identified as subscription |
+| notes | TEXT | Optional user notes |
+| created_at | TIMESTAMP | When pattern was first detected |
+| updated_at | TIMESTAMP | When pattern was last updated |
+
+**Purpose:** Tracks recurring transactions and subscriptions. Automatically populated by detection algorithm and used for monitoring subscription costs and alerting on amount changes.
+
 ## 🔒 Privacy & Security
 
 - ✅ **100% Local**: All data stays on your machine
@@ -351,7 +449,14 @@ All data is stored in `transactions.db` (SQLite) with three main tables:
 
 ## 🎉 Recently Added
 
-### v2.1 (Latest)
+### v2.2 (Latest)
+- [x] **Category Trends Chart** - Multi-line visualization of spending patterns over time
+- [x] **Recurring Transaction Detection** - Automatically identify subscriptions and bills
+- [x] **Subscription Identification** - Smart detection of subscription services
+- [x] **Amount Change Alerts** - Notifications when recurring payments vary
+- [x] **Date Ranges in Summary Cards** - See time period for all financial data
+
+### v2.1
 - [x] **Learning Categorizer** - Interactive modal to teach transaction patterns
 - [x] **Smart Pattern Extraction** - Removes noise, keeps core merchant names
 - [x] **Retroactive Updates** - All matching transactions recategorized automatically
@@ -369,17 +474,19 @@ All data is stored in `transactions.db` (SQLite) with three main tables:
 
 ## 🚀 Future Enhancement Ideas
 
-- [ ] Recurring transaction detection and alerts
 - [ ] Export to Excel/PDF reports
 - [ ] Year-over-year comparisons
-- [ ] Spending predictions with trends
-- [ ] Bill payment reminders
+- [ ] Spending predictions with ML
+- [ ] Bill payment reminders based on recurring patterns
 - [ ] Search and advanced filtering in transaction table
 - [ ] Multi-currency support
 - [ ] Mobile-responsive design improvements
-- [ ] Savings goals tracker
+- [ ] Savings goals tracker with visual progress
 - [ ] Bulk edit/merge categories
 - [ ] Custom category creation from UI
+- [ ] Merchant management dashboard
+- [ ] Email/SMS alerts for budget overruns
+- [ ] Tax category tagging for deductions
 
 ## 📝 Technical Details
 
