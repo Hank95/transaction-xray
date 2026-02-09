@@ -261,8 +261,14 @@ def get_budget_status():
 
 @app.route('/api/category-mappings', methods=['GET'])
 def get_category_mappings():
-    """Get all learned category mappings"""
-    mappings = db.get_all_category_mappings()
+    """Get all learned category mappings with statistics"""
+    include_stats = request.args.get('stats', 'false').lower() == 'true'
+
+    if include_stats:
+        mappings = db.get_category_mappings_with_stats()
+    else:
+        mappings = db.get_all_category_mappings()
+
     return jsonify(mappings)
 
 
@@ -303,6 +309,25 @@ def save_category_mapping():
         print(f"[ERROR] Exception in save_category_mapping: {e}")
         import traceback
         traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/category-mappings/<int:mapping_id>', methods=['PUT'])
+def update_category_mapping(mapping_id):
+    """Update a category mapping and reapply to transactions"""
+    data = request.get_json()
+    new_category = data.get('category')
+
+    if not new_category:
+        return jsonify({'error': 'Category required'}), 400
+
+    try:
+        affected_count = db.update_category_mapping(mapping_id, new_category)
+        return jsonify({
+            'message': 'Mapping updated successfully',
+            'affected_transactions': affected_count
+        })
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 

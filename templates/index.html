@@ -710,6 +710,74 @@
             margin-bottom: 10px;
             color: #333;
         }
+
+        /* Pattern Manager Styles */
+        .pattern-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .pattern-table th {
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .pattern-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .pattern-table tr:hover {
+            background: #f9fafb;
+        }
+
+        .pattern-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.85em;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-edit {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-edit:hover {
+            background: #5568d3;
+        }
+
+        .btn-delete {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-delete:hover {
+            background: #dc2626;
+        }
+
+        .pattern-stat {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .pattern-stat strong {
+            color: #333;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -747,7 +815,10 @@
                 <input type="checkbox" id="exclude-transfers" onchange="toggleTransferExclusion()">
                 <span class="toggle-label">💡 Exclude Transfers & Payments (show actual spending only)</span>
             </label>
-            <button class="btn btn-primary" onclick="showCategorizer()">🏷️ Categorize "Other" Transactions</button>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-primary" onclick="showCategorizer()">🏷️ Categorize "Other" Transactions</button>
+                <button class="btn btn-primary" onclick="showPatternManager()">⚙️ Manage Learned Patterns</button>
+            </div>
         </div>
 
         <div class="charts-section">
@@ -1608,11 +1679,123 @@
             return pattern.trim();
         }
 
+        // Pattern Manager Functions
+        function showPatternManager() {
+            document.getElementById('pattern-manager-modal').classList.add('active');
+            loadLearnedPatterns();
+        }
+
+        function closePatternManager() {
+            document.getElementById('pattern-manager-modal').classList.remove('active');
+        }
+
+        function loadLearnedPatterns() {
+            fetch('/api/category-mappings?stats=true')
+                .then(res => res.json())
+                .then(patterns => {
+                    const contentEl = document.getElementById('pattern-manager-content');
+
+                    if (patterns.length === 0) {
+                        contentEl.innerHTML = `
+                            <div class="empty-state">
+                                <h3>No learned patterns yet</h3>
+                                <p>Start categorizing "Other" transactions to teach the system!</p>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    const totalTransactions = patterns.reduce((sum, p) => sum + p.transaction_count, 0);
+                    const totalAmount = patterns.reduce((sum, p) => sum + p.total_amount, 0);
+
+                    contentEl.innerHTML = `
+                        <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #667eea;">
+                            <strong>📊 Summary:</strong> ${patterns.length} learned patterns affecting ${totalTransactions.toLocaleString()} transactions ($${totalAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})
+                        </div>
+                        <table class="pattern-table">
+                            <thead>
+                                <tr>
+                                    <th>Merchant Pattern</th>
+                                    <th>Category</th>
+                                    <th>Transactions</th>
+                                    <th>Total Amount</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${patterns.map(p => `
+                                    <tr>
+                                        <td><strong>${p.merchant_pattern}</strong></td>
+                                        <td><span class="category-badge">${p.category}</span></td>
+                                        <td class="pattern-stat">${p.transaction_count} transactions</td>
+                                        <td class="pattern-stat"><strong>$${p.total_amount.toLocaleString('en-US', {minimumFractionDigits: 2})}</strong></td>
+                                        <td>
+                                            <div class="pattern-actions">
+                                                <button class="btn-sm btn-edit" onclick="editPattern(${p.id}, '${p.merchant_pattern}', '${p.category}')">✏️ Edit</button>
+                                                <button class="btn-sm btn-delete" onclick="deletePattern(${p.id}, '${p.merchant_pattern}', ${p.transaction_count})">🗑️ Delete</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                });
+        }
+
+        function editPattern(id, merchantPattern, currentCategory) {
+            const newCategory = prompt(`Edit category for "${merchantPattern}"\n\nCurrent: ${currentCategory}\nEnter new category:`, currentCategory);
+
+            if (!newCategory || newCategory === currentCategory) {
+                return;
+            }
+
+            showMessage('Updating pattern and reapplying to transactions...', 'info');
+
+            fetch(`/api/category-mappings/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ category: newCategory })
+            })
+            .then(res => res.json())
+            .then(data => {
+                showMessage(`✓ Updated "${merchantPattern}" → ${newCategory} (${data.affected_transactions} transactions updated)`, 'success');
+                loadLearnedPatterns();
+                refreshData();
+            })
+            .catch(err => {
+                showMessage('Error updating pattern: ' + err.message, 'error');
+            });
+        }
+
+        function deletePattern(id, merchantPattern, transactionCount) {
+            if (!confirm(`Delete pattern "${merchantPattern}"?\n\nThis will affect ${transactionCount} transactions.\nThey will be recategorized as "Other" on next import.`)) {
+                return;
+            }
+
+            fetch(`/api/category-mappings/${id}`, {
+                method: 'DELETE'
+            })
+            .then(res => res.json())
+            .then(data => {
+                showMessage(`✓ Deleted pattern "${merchantPattern}"`, 'success');
+                loadLearnedPatterns();
+            })
+            .catch(err => {
+                showMessage('Error deleting pattern: ' + err.message, 'error');
+            });
+        }
+
         // Close modal when clicking outside
         document.addEventListener('click', function(e) {
-            const modal = document.getElementById('categorizer-modal');
-            if (e.target === modal) {
+            const categorizerModal = document.getElementById('categorizer-modal');
+            const patternModal = document.getElementById('pattern-manager-modal');
+
+            if (e.target === categorizerModal) {
                 closeCategorizer();
+            }
+            if (e.target === patternModal) {
+                closePatternManager();
             }
         });
     </script>
@@ -1628,6 +1811,22 @@
                 Select a category for each transaction. The system will learn and automatically categorize similar transactions in the future.
             </p>
             <div id="categorizer-list" class="categorizer-list">
+                <div class="empty-state">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pattern Manager Modal -->
+    <div id="pattern-manager-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ Manage Learned Patterns</h2>
+                <button class="modal-close" onclick="closePatternManager()">×</button>
+            </div>
+            <p style="color: #666; margin-bottom: 20px;">
+                View and manage all the merchant patterns the system has learned. Edit categories or delete patterns that aren't working correctly.
+            </p>
+            <div id="pattern-manager-content">
                 <div class="empty-state">Loading...</div>
             </div>
         </div>

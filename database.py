@@ -539,6 +539,62 @@ class TransactionDatabase:
 
         return [dict(row) for row in rows]
 
+    def get_category_mappings_with_stats(self) -> List[Dict]:
+        """Get all category mappings with transaction counts"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                cm.*,
+                COUNT(t.id) as transaction_count,
+                COALESCE(SUM(t.amount), 0) as total_amount
+            FROM category_mappings cm
+            LEFT JOIN transactions t ON UPPER(t.description) LIKE '%' || cm.merchant_pattern || '%'
+            GROUP BY cm.id, cm.merchant_pattern, cm.category, cm.created_at
+            ORDER BY transaction_count DESC, cm.created_at DESC
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [dict(row) for row in rows]
+
+    def update_category_mapping(self, mapping_id: int, new_category: str) -> int:
+        """Update a category mapping and reapply to matching transactions"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # Get the merchant pattern
+        cursor.execute("SELECT merchant_pattern FROM category_mappings WHERE id = ?", (mapping_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            conn.close()
+            return 0
+
+        merchant_pattern = row[0]
+
+        # Update the mapping
+        cursor.execute("""
+            UPDATE category_mappings
+            SET category = ?, created_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (new_category, mapping_id))
+
+        # Update all matching transactions
+        cursor.execute("""
+            UPDATE transactions
+            SET category = ?
+            WHERE UPPER(description) LIKE '%' || ? || '%'
+        """, (new_category, merchant_pattern.upper()))
+
+        affected_count = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        return affected_count
+
     def get_category_mapping(self, merchant_pattern: str) -> Optional[str]:
         """Get category for a merchant pattern"""
         conn = sqlite3.connect(self.db_path)
