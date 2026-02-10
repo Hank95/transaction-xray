@@ -751,6 +751,15 @@
             transition: all 0.2s;
         }
 
+        .btn-view {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-view:hover {
+            background: #059669;
+        }
+
         .btn-edit {
             background: #667eea;
             color: white;
@@ -1731,6 +1740,7 @@
                                         <td class="pattern-stat"><strong>$${p.total_amount.toLocaleString('en-US', {minimumFractionDigits: 2})}</strong></td>
                                         <td>
                                             <div class="pattern-actions">
+                                                <button class="btn-sm btn-view" onclick="viewPatternTransactions(${p.id}, '${p.merchant_pattern}', ${p.transaction_count})">👁️ View</button>
                                                 <button class="btn-sm btn-edit" onclick="editPattern(${p.id}, '${p.merchant_pattern}', '${p.category}')">✏️ Edit</button>
                                                 <button class="btn-sm btn-delete" onclick="deletePattern(${p.id}, '${p.merchant_pattern}', ${p.transaction_count})">🗑️ Delete</button>
                                             </div>
@@ -1786,16 +1796,79 @@
             });
         }
 
+        function viewPatternTransactions(id, merchantPattern, transactionCount) {
+            // Open the pattern details modal
+            document.getElementById('pattern-details-modal').classList.add('active');
+            document.getElementById('pattern-details-title').textContent = merchantPattern;
+            document.getElementById('pattern-details-count').textContent = `${transactionCount} transactions`;
+
+            const contentEl = document.getElementById('pattern-details-content');
+            contentEl.innerHTML = '<div class="empty-state">Loading transactions...</div>';
+
+            // Fetch transactions matching this pattern
+            fetch(`/api/category-mappings/${id}/transactions`)
+                .then(res => res.json())
+                .then(transactions => {
+                    if (transactions.length === 0) {
+                        contentEl.innerHTML = '<div class="empty-state">No transactions found</div>';
+                        return;
+                    }
+
+                    const totalAmount = transactions.reduce((sum, t) => sum + t.amount, 0);
+
+                    contentEl.innerHTML = `
+                        <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #10b981;">
+                            <strong>📊 Total:</strong> ${transactions.length} transactions • $${totalAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}
+                        </div>
+                        <div class="table-container" style="max-height: 500px; overflow-y: auto;">
+                            <table class="pattern-table">
+                                <thead style="position: sticky; top: 0; background: white; z-index: 1;">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Description</th>
+                                        <th>Category</th>
+                                        <th>Amount</th>
+                                        <th>Account</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${transactions.map(t => `
+                                        <tr>
+                                            <td>${t.date}</td>
+                                            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${t.description}">${t.description}</td>
+                                            <td><span class="category-badge">${t.category}</span></td>
+                                            <td><strong>$${t.amount.toLocaleString('en-US', {minimumFractionDigits: 2})}</strong></td>
+                                            <td style="font-size: 0.9em; color: #666;">${t.account_type}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                })
+                .catch(err => {
+                    contentEl.innerHTML = `<div class="empty-state">Error loading transactions: ${err.message}</div>`;
+                });
+        }
+
+        function closePatternDetails() {
+            document.getElementById('pattern-details-modal').classList.remove('active');
+        }
+
         // Close modal when clicking outside
         document.addEventListener('click', function(e) {
             const categorizerModal = document.getElementById('categorizer-modal');
             const patternModal = document.getElementById('pattern-manager-modal');
+            const patternDetailsModal = document.getElementById('pattern-details-modal');
 
             if (e.target === categorizerModal) {
                 closeCategorizer();
             }
             if (e.target === patternModal) {
                 closePatternManager();
+            }
+            if (e.target === patternDetailsModal) {
+                closePatternDetails();
             }
         });
     </script>
@@ -1827,6 +1900,25 @@
                 View and manage all the merchant patterns the system has learned. Edit categories or delete patterns that aren't working correctly.
             </p>
             <div id="pattern-manager-content">
+                <div class="empty-state">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pattern Details Modal -->
+    <div id="pattern-details-modal" class="modal">
+        <div class="modal-content" style="max-width: 1000px;">
+            <div class="modal-header">
+                <div>
+                    <h2>👁️ Pattern Transactions: <span id="pattern-details-title"></span></h2>
+                    <p style="color: #666; margin: 5px 0 0 0; font-size: 0.9em;" id="pattern-details-count"></p>
+                </div>
+                <button class="modal-close" onclick="closePatternDetails()">×</button>
+            </div>
+            <p style="color: #666; margin-bottom: 20px;">
+                All transactions matching this merchant pattern. Review to verify the pattern is working correctly.
+            </p>
+            <div id="pattern-details-content">
                 <div class="empty-state">Loading...</div>
             </div>
         </div>

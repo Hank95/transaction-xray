@@ -338,6 +338,13 @@ def delete_category_mapping(mapping_id):
     return jsonify({'message': 'Mapping deleted successfully'})
 
 
+@app.route('/api/category-mappings/<int:mapping_id>/transactions', methods=['GET'])
+def get_pattern_transactions(mapping_id):
+    """Get all transactions matching a specific pattern"""
+    transactions = db.get_transactions_by_pattern(mapping_id)
+    return jsonify(transactions)
+
+
 # Recurring Transaction API Endpoints
 
 @app.route('/api/recurring/detect', methods=['POST'])

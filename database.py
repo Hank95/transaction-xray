@@ -595,6 +595,35 @@ class TransactionDatabase:
 
         return affected_count
 
+    def get_transactions_by_pattern(self, mapping_id: int) -> List[Dict]:
+        """Get all transactions matching a specific pattern"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Get the merchant pattern
+        cursor.execute("SELECT merchant_pattern FROM category_mappings WHERE id = ?", (mapping_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            conn.close()
+            return []
+
+        merchant_pattern = row[0]
+
+        # Get all matching transactions
+        cursor.execute("""
+            SELECT *
+            FROM transactions
+            WHERE UPPER(description) LIKE '%' || ? || '%'
+            ORDER BY date DESC
+        """, (merchant_pattern.upper(),))
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [dict(row) for row in rows]
+
     def get_category_mapping(self, merchant_pattern: str) -> Optional[str]:
         """Get category for a merchant pattern"""
         conn = sqlite3.connect(self.db_path)
